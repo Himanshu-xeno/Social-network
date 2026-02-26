@@ -1,77 +1,50 @@
-// import React, { Component } from 'react';
-// import Identicon from 'identicon.js';
-
-// class Navbar extends Component {
-
-//   render() {
-//     return (
-//       <nav className="navbar navbar-dark fixed-top bg-dark flex-md-nowrap p-0 shadow">
-//         <a
-//           className="navbar-brand col-sm-3 col-md-2 mr-0"
-//           href="http://www.dappuniversity.com/bootcamp"
-//           target="_blank"
-//           rel="noopener noreferrer"
-//         >
-//           Dapp University
-//         </a>
-//         <ul className="navbar-nav px-3">
-//           <li className="nav-item text-nowrap d-none d-sm-none d-sm-block">
-//             <small className="text-secondary">
-//               <small id="account">{this.props.account}</small>
-//             </small>
-//             { this.props.account
-//               ? <img
-//                 className='ml-2'
-//                 width='30'
-//                 height='30'
-//                 src={`data:image/png;base64,${new Identicon(this.props.account, 30).toString()}`}
-//               />
-//               : <span></span>
-//             }
-//           </li>
-//         </ul>
-//       </nav>
-//     );
-//   }
-// }
-
-// export default Navbar;
-
-
-
 import React, { Component } from 'react';
 import Identicon from 'identicon.js';
+import { FaWallet, FaUserCircle } from 'react-icons/fa';
 
 class Navbar extends Component {
-
   render() {
+    const { account, username, onProfileClick } = this.props;
+
     return (
-      <nav className="navbar navbar-dark fixed-top bg-dark flex-md-nowrap p-0 shadow">
-        <a
-          className="navbar-brand col-sm-3 col-md-2 mr-0"
-          href="http://www.dappuniversity.com/bootcamp"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Dapp University
-        </a>
-        <ul className="navbar-nav px-3">
-          <li className="nav-item text-nowrap d-none d-sm-none d-sm-block">
-            <small className="text-secondary">
-              <small id="account">{this.props.account}</small>
-            </small>
-            {this.props.account
-              ? <img
-                  className='ml-2'
-                  width='30'
-                  height='30'
-                  src={`data:image/png;base64,${new Identicon(this.props.account, 30).toString()}`}
-                  alt="User Identicon"
+      <nav className="navbar-dchain">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <a className="navbar-brand-dchain" href="/" onClick={(e) => e.preventDefault()}>
+            <div className="brand-icon">⛓️</div>
+            DChain Social
+          </a>
+
+          <div className="wallet-info">
+            {account && (
+              <>
+                <button
+                  onClick={onProfileClick}
+                  className="media-btn"
+                  style={{ color: '#a29bfe' }}
+                  title="Edit Profile"
+                >
+                  <FaUserCircle size={18} />
+                  <span style={{ fontSize: '0.8rem' }}>
+                    {username || 'Set Profile'}
+                  </span>
+                </button>
+
+                <span className="wallet-address">
+                  <FaWallet style={{ marginRight: '6px' }} />
+                  {account.substring(0, 6)}...{account.substring(38)}
+                </span>
+
+                <img
+                  className="wallet-identicon"
+                  width="32"
+                  height="32"
+                  src={`data:image/png;base64,${new Identicon(account, 32).toString()}`}
+                  alt="Account"
                 />
-              : <span></span>
-            }
-          </li>
-        </ul>
+              </>
+            )}
+          </div>
+        </div>
       </nav>
     );
   }

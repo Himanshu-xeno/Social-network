@@ -1,231 +1,150 @@
-// import React, { Component } from 'react';
-// import Identicon from 'identicon.js';
-
-// class Main extends Component {
-
-//   render() {
-//     return (
-//       <div className="container-fluid mt-5">
-//         <div className="row">
-//           <main role="main" className="col-lg-12 ml-auto mr-auto" style={{ maxWidth: '500px' }}>
-//             <div className="content mr-auto ml-auto">
-//               <p>&nbsp;</p>
-//                 <form onSubmit={(event) => {
-//                   event.preventDefault()
-//                   const content = this.postContent.value
-//                   this.props.createPost(content)
-//                 }}>
-//                 <div className="form-group mr-sm-2">
-//                   <input
-//                     id="postContent"
-//                     type="text"
-//                     ref={(input) => { this.postContent = input }}
-//                     className="form-control"
-//                     placeholder="What's on your mind?"
-//                     required />
-//                 </div>
-//                 <button type="submit" className="btn btn-primary btn-block">Share</button>
-//               </form>
-//               <p>&nbsp;</p>
-//               { this.props.posts.map((post, key) => {
-//                 return(
-//                   <div className="card mb-4" key={key} >
-//                     <div className="card-header">
-//                       <img
-//                         className='mr-2'
-//                         width='30'
-//                         height='30'
-//                         src={`data:image/png;base64,${new Identicon(post.author, 30).toString()}`}
-//                       />
-//                       <small className="text-muted">{post.author}</small>
-//                     </div>
-//                     <ul id="postList" className="list-group list-group-flush">
-//                       <li className="list-group-item">
-//                         <p>{post.content}</p>
-//                       </li>
-//                       <li key={key} className="list-group-item py-2">
-//                         <small className="float-left mt-1 text-muted">
-//                           TIPS: {window.web3.utils.fromWei(post.tipAmount.toString(), 'Ether')} ETH
-//                         </small>
-//                         <button
-//                           className="btn btn-link btn-sm float-right pt-0"
-//                           name={post.id}
-//                           onClick={(event) => {
-//                             let tipAmount = window.web3.utils.toWei('0.1', 'Ether')
-//                             console.log(event.target.name, tipAmount)
-//                             this.props.tipPost(event.target.name, tipAmount)
-//                           }}
-//                         >
-//                           TIP 0.1 ETH
-//                         </button>
-//                       </li>
-//                     </ul>
-//                   </div>
-//                 )
-//               })}
-//             </div>
-//           </main>
-//         </div>
-//       </div>
-//     );
-//   }
-// }
-
-// export default Main;
-
-
-
-// import React, { Component } from 'react';
-// import Identicon from 'identicon.js';
-
-// class Main extends Component {
-
-//   render() {
-//     return (
-//       <div className="container-fluid mt-5">
-//         <div className="row">
-//           <main role="main" className="col-lg-12 ml-auto mr-auto" style={{ maxWidth: '500px' }}>
-//             <div className="content mr-auto ml-auto">
-//               <p>&nbsp;</p>
-//               <form onSubmit={(event) => {
-//                 event.preventDefault()
-//                 const content = this.postContent.value
-//                 this.props.createPost(content)
-//               }}>
-//                 <div className="form-group mr-sm-2">
-//                   <input
-//                     id="postContent"
-//                     type="text"
-//                     ref={(input) => { this.postContent = input }}
-//                     className="form-control"
-//                     placeholder="What's on your mind?"
-//                     required />
-//                 </div>
-//                 <button type="submit" className="btn btn-primary btn-block">Share</button>
-//               </form>
-//               <p>&nbsp;</p>
-//               {this.props.posts.map((post, key) => {
-//                 return (
-//                   <div className="card mb-4" key={key}>
-//                     <div className="card-header">
-//                       <img
-//                         className='mr-2'
-//                         width='30'
-//                         height='30'
-//                         src={`data:image/png;base64,${new Identicon(post.author, 30).toString()}`}
-//                         alt="Author Identicon"
-//                       />
-//                       <small className="text-muted">{post.author}</small>
-//                     </div>
-//                     <ul id="postList" className="list-group list-group-flush">
-//                       <li className="list-group-item">
-//                         <p>{post.content}</p>
-//                       </li>
-//                       <li key={key} className="list-group-item py-2">
-//                         <small className="float-left mt-1 text-muted">
-//                           TIPS: {this.props.web3.utils.fromWei(post.tipAmount.toString(), 'Ether')} ETH
-//                         </small>
-//                         <button
-//                           className="btn btn-link btn-sm float-right pt-0"
-//                           name={post.id}
-//                           onClick={(event) => {
-//                             let tipAmount = this.props.web3.utils.toWei('0.1', 'Ether')
-//                             console.log(event.target.name, tipAmount)
-//                             this.props.tipPost(event.target.name, tipAmount)
-//                           }}
-//                         >
-//                           TIP 0.1 ETH
-//                         </button>
-//                       </li>
-//                     </ul>
-//                   </div>
-//                 )
-//               })}
-//             </div>
-//           </main>
-//         </div>
-//       </div>
-//     );
-//   }
-// }
-
-// export default Main;
-
-
-
-
-
-
 import React, { Component } from 'react';
-import Identicon from 'identicon.js';
+import CreatePost from './CreatePost';
+import PostCard from './PostCard';
+import { FaGlobeAmericas, FaImage, FaVideo, FaMusic, FaFileAlt, FaFire } from 'react-icons/fa';
 
 class Main extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      filter: 'all',
+      sortBy: 'newest'
+    };
+  }
+
+  getFilteredPosts = () => {
+    const { posts } = this.props;
+    const { filter, sortBy } = this.state;
+
+    let filtered = [...posts];
+
+    // Filter
+    if (filter !== 'all') {
+      filtered = filtered.filter(post => {
+        const type = post.mediaType || 'text';
+        if (filter === 'text') return type === 'text' || type === '';
+        return type === filter;
+      });
+    }
+
+    // Sort
+    switch (sortBy) {
+      case 'newest':
+        filtered.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+        break;
+      case 'mostTipped':
+        filtered.sort((a, b) => Number(b.tipAmount) - Number(a.tipAmount));
+        break;
+      case 'mostLiked':
+        filtered.sort((a, b) => Number(b.likeCount) - Number(a.likeCount));
+        break;
+      default:
+        break;
+    }
+
+    return filtered;
+  }
+
+  getTotalTips = () => {
+    const { posts } = this.props;
+    if (!posts || posts.length === 0) return '0';
+    const total = posts.reduce((sum, post) => {
+      return sum + Number(post.tipAmount || 0);
+    }, 0);
+    if (total === 0) return '0';
+    return parseFloat(window.web3.utils.fromWei(total.toString(), 'Ether')).toFixed(4);
+  }
 
   render() {
+    const { posts, account, createPost, tipPost, likePost, unlikePost, addComment, postLikes, postComments, profiles } = this.props;
+    const { filter, sortBy } = this.state;
+    const filteredPosts = this.getFilteredPosts();
+
     return (
-      <div className="container-fluid mt-5">
-        <div className="row">
-          <main role="main" className="col-lg-12 ml-auto mr-auto" style={{ maxWidth: '500px' }}>
-            <div className="content mr-auto ml-auto">
-              <p>&nbsp;</p>
-              <form onSubmit={(event) => {
-                event.preventDefault()
-                const content = this.postContent.value
-                this.props.createPost(content)
-              }}>
-                <div className="form-group mr-sm-2">
-                  <input
-                    id="postContent"
-                    type="text"
-                    ref={(input) => { this.postContent = input }}
-                    className="form-control"
-                    placeholder="What's on your mind?"
-                    required />
-                </div>
-                <button type="submit" className="btn btn-primary btn-block">Share</button>
-              </form>
-              <p>&nbsp;</p>
-              {this.props.posts.map((post, key) => {
-                return (
-                  <div className="card mb-4" key={key}>
-                    <div className="card-header">
-                      <img
-                        className='mr-2'
-                        width='30'
-                        height='30'
-                        src={`data:image/png;base64,${new Identicon(post.author, 30).toString()}`}
-                        alt="author"
-                      />
-                      <small className="text-muted">{post.author}</small>
-                    </div>
-                    <ul id="postList" className="list-group list-group-flush">
-                      <li className="list-group-item">
-                        <p>{post.content}</p>
-                      </li>
-                      <li key={key} className="list-group-item py-2">
-                        {/* FIXED: Changed this.props.web3 to window.web3 */}
-                        <small className="float-left mt-1 text-muted">
-                          TIPS: {window.web3.utils.fromWei(post.tipAmount.toString(), 'Ether')} ETH
-                        </small>
-                        <button
-                          className="btn btn-link btn-sm float-right pt-0"
-                          name={post.id}
-                          onClick={(event) => {
-                            // FIXED: Changed this.props.web3 to window.web3
-                            let tipAmount = window.web3.utils.toWei('0.1', 'Ether')
-                            console.log(event.target.name, tipAmount)
-                            this.props.tipPost(event.target.name, tipAmount)
-                          }}
-                        >
-                          TIP 0.1 ETH
-                        </button>
-                      </li>
-                    </ul>
-                  </div>
-                )
-              })}
+      <div className="main-content">
+        <div className="content-container">
+
+          {/* Stats Bar */}
+          <div className="stats-bar">
+            <div className="stat-item">
+              <span className="stat-value">{posts.length}</span>
+              <span className="stat-label">Total Posts</span>
             </div>
-          </main>
+            <div className="stat-item">
+              <span className="stat-value">{this.getTotalTips()}</span>
+              <span className="stat-label">ETH Tipped</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-value">
+                {posts.reduce((sum, p) => sum + Number(p.likeCount || 0), 0)}
+              </span>
+              <span className="stat-label">Total Likes</span>
+            </div>
+          </div>
+
+          {/* Create Post */}
+          <CreatePost
+            account={account}
+            createPost={createPost}
+          />
+
+          {/* Filter Bar */}
+          <div className="filter-bar">
+            {[
+              { key: 'all', label: 'All Posts', icon: <FaGlobeAmericas /> },
+              { key: 'text', label: 'Text', icon: <FaFileAlt /> },
+              { key: 'image', label: 'Images', icon: <FaImage /> },
+              { key: 'video', label: 'Videos', icon: <FaVideo /> },
+              { key: 'audio', label: 'Audio', icon: <FaMusic /> },
+            ].map(f => (
+              <button
+                key={f.key}
+                className={`filter-btn ${filter === f.key ? 'active' : ''}`}
+                onClick={() => this.setState({ filter: f.key })}
+              >
+                {f.icon} &nbsp;{f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Sort Bar */}
+          <div className="sort-bar">
+            <span className="sort-label">
+              <FaFire style={{ marginRight: '4px' }} /> Sort by:
+            </span>
+            <select
+              className="sort-select"
+              value={sortBy}
+              onChange={(e) => this.setState({ sortBy: e.target.value })}
+            >
+              <option value="newest">🕐 Newest First</option>
+              <option value="mostTipped">💰 Most Tipped</option>
+              <option value="mostLiked">❤️ Most Liked</option>
+            </select>
+          </div>
+
+          {/* Posts Feed */}
+          {filteredPosts.length === 0 ? (
+            <div className="no-posts">
+              <div className="no-posts-icon">📭</div>
+              <h3>No posts yet</h3>
+              <p>Be the first to share something with the community!</p>
+            </div>
+          ) : (
+            filteredPosts.map((post, index) => (
+              <PostCard
+                key={post.id?.toString() || index}
+                post={post}
+                tipPost={tipPost}
+                likePost={likePost}
+                unlikePost={unlikePost}
+                addComment={addComment}
+                hasLiked={postLikes[post.id?.toString()] || false}
+                comments={postComments[post.id?.toString()] || []}
+                profiles={profiles}
+              />
+            ))
+          )}
         </div>
       </div>
     );
