@@ -27,7 +27,6 @@ class PostCard extends Component {
     const { tipAmount } = this.state;
     const { post } = this.props;
     if (!tipAmount || parseFloat(tipAmount) <= 0) return;
-
     const tipWei = window.web3.utils.toWei(tipAmount, 'Ether');
     this.props.tipPost(post.id, tipWei);
     this.setState({ tipAmount: '', showTip: false });
@@ -53,7 +52,6 @@ class PostCard extends Component {
     const { commentText } = this.state;
     const { post } = this.props;
     if (!commentText.trim()) return;
-
     this.props.addComment(post.id, commentText);
     this.setState({ commentText: '' });
   }
@@ -62,7 +60,6 @@ class PostCard extends Component {
     const date = new Date(Number(timestamp) * 1000);
     const now = new Date();
     const diff = Math.floor((now - date) / 1000);
-
     if (diff < 60) return 'Just now';
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
@@ -78,13 +75,13 @@ class PostCard extends Component {
 
   getMediaTypeBadge = (type) => {
     const badges = {
-      image: { class: 'badge-image', label: '📷 Image' },
-      video: { class: 'badge-video', label: '🎬 Video' },
-      audio: { class: 'badge-audio', label: '🎵 Audio' },
-      text: { class: 'badge-text', label: '📝 Text' }
+      image: { cls: 'badge-image', label: '📷 Image' },
+      video: { cls: 'badge-video', label: '🎬 Video' },
+      audio: { cls: 'badge-audio', label: '🎵 Audio' },
+      text: { cls: 'badge-text', label: '📝 Text' }
     };
     const badge = badges[type] || badges.text;
-    return <span className={`post-media-type-badge ${badge.class}`}>{badge.label}</span>;
+    return <span className={`post-media-type-badge ${badge.cls}`}>{badge.label}</span>;
   }
 
   renderMedia = () => {
@@ -92,35 +89,26 @@ class PostCard extends Component {
     if (!post.mediaHash || post.mediaHash === '') return null;
 
     const url = getIpfsUrl(post.mediaHash);
-    const mediaType = post.mediaType;
 
     return (
       <div className="post-media">
-        {mediaType === 'image' && (
+        {post.mediaType === 'image' && (
           <img
             src={url}
-            alt="Post media"
+            alt="Post"
             onClick={() => this.setState({ lightbox: true })}
             onError={(e) => { e.target.style.display = 'none'; }}
           />
         )}
-
-        {mediaType === 'video' && (
-          <video
-            src={url}
-            controls
-            preload="metadata"
+        {post.mediaType === 'video' && (
+          <video src={url} controls preload="metadata"
             onError={(e) => { e.target.style.display = 'none'; }}
           />
         )}
-
-        {mediaType === 'audio' && (
+        {post.mediaType === 'audio' && (
           <div className="audio-container">
             <FaMusic className="audio-icon" />
-            <audio
-              src={url}
-              controls
-              style={{ width: '100%' }}
+            <audio src={url} controls style={{ width: '100%' }}
               onError={(e) => { e.target.parentElement.style.display = 'none'; }}
             />
           </div>
@@ -129,39 +117,37 @@ class PostCard extends Component {
     );
   }
 
-  renderLightbox = () => {
-    const { post } = this.props;
-    if (!this.state.lightbox || !post.mediaHash) return null;
-
-    return (
-      <div
-        className="lightbox-overlay"
-        onClick={() => this.setState({ lightbox: false })}
-      >
-        <img src={getIpfsUrl(post.mediaHash)} alt="Full size" />
-      </div>
-    );
-  }
-
   render() {
-    const { post, hasLiked, comments, profiles } = this.props;
-    const { showTip, showComments, tipAmount, commentText } = this.state;
+    const { post, hasLiked, comments, profiles, onProfileClick } = this.props;
+    const { showTip, showComments, tipAmount, commentText, lightbox } = this.state;
 
     const authorProfile = profiles[post.author];
     const authorName = authorProfile && authorProfile.username
       ? authorProfile.username
       : `${post.author.substring(0, 6)}...${post.author.substring(38)}`;
 
+    const authorAvatar = authorProfile && authorProfile.avatarHash
+      ? getIpfsUrl(authorProfile.avatarHash)
+      : null;
+
     return (
       <div className="post-card">
         {/* Header */}
         <div className="post-header">
-          <div className="post-author-info">
+          <div
+            className="post-author-info"
+            style={{ cursor: 'pointer' }}
+            onClick={() => onProfileClick && onProfileClick(post.author)}
+          >
             <div className="post-identicon">
-              <img
-                src={`data:image/png;base64,${new Identicon(post.author, 40).toString()}`}
-                alt="Author"
-              />
+              {authorAvatar ? (
+                <img src={authorAvatar} alt="Author" style={{ objectFit: 'cover' }} />
+              ) : (
+                <img
+                  src={`data:image/png;base64,${new Identicon(post.author, 40).toString()}`}
+                  alt="Author"
+                />
+              )}
             </div>
             <div className="author-details">
               <div className="author-name">{authorName}</div>
@@ -185,12 +171,10 @@ class PostCard extends Component {
         {/* Stats */}
         <div className="post-stats">
           <span>
-            <FaHeart style={{ color: post.likeCount > 0 ? '#ff6b6b' : 'inherit' }} />
+            <FaHeart style={{ color: Number(post.likeCount) > 0 ? '#ff6b6b' : 'inherit' }} />
             {post.likeCount?.toString() || '0'} likes
           </span>
-          <span>
-            <FaComment /> {post.commentCount?.toString() || '0'} comments
-          </span>
+          <span><FaComment /> {post.commentCount?.toString() || '0'} comments</span>
           <span className="tip-display">
             <FaEthereum /> {this.formatEth(post.tipAmount)} ETH
           </span>
@@ -198,22 +182,15 @@ class PostCard extends Component {
 
         {/* Actions */}
         <div className="post-actions">
-          <button
-            className={`action-btn like-btn ${hasLiked ? 'liked' : ''}`}
-            onClick={this.handleLike}
-          >
+          <button className={`action-btn like-btn ${hasLiked ? 'liked' : ''}`} onClick={this.handleLike}>
             {hasLiked ? <FaHeart className="icon" /> : <FaRegHeart className="icon" />}
             {hasLiked ? 'Liked' : 'Like'}
           </button>
-
           <button className="action-btn comment-btn" onClick={this.toggleComments}>
-            <FaComment className="icon" />
-            Comment
+            <FaComment className="icon" /> Comment
           </button>
-
           <button className="action-btn tip-btn" onClick={this.toggleTip}>
-            <FaEthereum className="icon" />
-            Tip
+            <FaEthereum className="icon" /> Tip
           </button>
         </div>
 
@@ -221,26 +198,24 @@ class PostCard extends Component {
         {showTip && (
           <div className="tip-section">
             <div className="tip-quick-btns">
-              <button className="tip-quick-btn" onClick={() => this.handleQuickTip('0.01')}>0.01</button>
-              <button className="tip-quick-btn" onClick={() => this.handleQuickTip('0.05')}>0.05</button>
-              <button className="tip-quick-btn" onClick={() => this.handleQuickTip('0.1')}>0.1</button>
+              <button className="tip-quick-btn" onClick={() => this.handleQuickTip('0.01')}>0.01 ETH</button>
+              <button className="tip-quick-btn" onClick={() => this.handleQuickTip('0.05')}>0.05 ETH</button>
+              <button className="tip-quick-btn" onClick={() => this.handleQuickTip('0.1')}>0.1 ETH</button>
             </div>
             <input
               className="tip-input"
               type="number"
               step="0.01"
               min="0"
-              placeholder="Custom ETH amount"
+              placeholder="Custom amount (ETH)"
               value={tipAmount}
               onChange={(e) => this.setState({ tipAmount: e.target.value })}
             />
-            <button className="tip-send-btn" onClick={this.handleTip}>
-              Send Tip
-            </button>
+            <button className="tip-send-btn" onClick={this.handleTip}>Send</button>
           </div>
         )}
 
-        {/* Comments Section */}
+        {/* Comments */}
         {showComments && (
           <div className="comment-section">
             <div className="comment-input-wrapper">
@@ -252,29 +227,32 @@ class PostCard extends Component {
                 onChange={(e) => this.setState({ commentText: e.target.value })}
                 onKeyPress={(e) => e.key === 'Enter' && this.handleComment()}
               />
-              <button className="comment-submit-btn" onClick={this.handleComment}>
-                Post
-              </button>
+              <button className="comment-submit-btn" onClick={this.handleComment}>Post</button>
             </div>
-
-            {comments && comments.map((comment, index) => (
-              <div className="comment-item" key={index}>
-                <div className="comment-identicon">
-                  <img
-                    src={`data:image/png;base64,${new Identicon(comment.author, 28).toString()}`}
-                    alt="Commenter"
-                  />
-                </div>
-                <div className="comment-body">
-                  <div className="comment-author">
-                    {comment.author.substring(0, 8)}...{comment.author.substring(38)}
+            {comments && comments.map((comment, idx) => {
+              const commenterProfile = profiles[comment.author];
+              const commenterName = commenterProfile?.username ||
+                `${comment.author.substring(0, 8)}...${comment.author.substring(38)}`;
+              return (
+                <div className="comment-item" key={idx}>
+                  <div className="comment-identicon">
+                    {commenterProfile?.avatarHash ? (
+                      <img src={getIpfsUrl(commenterProfile.avatarHash)} alt="Commenter" style={{ objectFit: 'cover' }} />
+                    ) : (
+                      <img
+                        src={`data:image/png;base64,${new Identicon(comment.author, 28).toString()}`}
+                        alt="Commenter"
+                      />
+                    )}
                   </div>
-                  <div className="comment-text">{comment.content}</div>
-                  <div className="comment-time">{this.formatTime(comment.timestamp)}</div>
+                  <div className="comment-body">
+                    <div className="comment-author">{commenterName}</div>
+                    <div className="comment-text">{comment.content}</div>
+                    <div className="comment-time">{this.formatTime(comment.timestamp)}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
-
+              );
+            })}
             {(!comments || comments.length === 0) && (
               <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '8px' }}>
                 No comments yet. Be the first!
@@ -284,7 +262,11 @@ class PostCard extends Component {
         )}
 
         {/* Lightbox */}
-        {this.renderLightbox()}
+        {lightbox && post.mediaHash && (
+          <div className="lightbox-overlay" onClick={() => this.setState({ lightbox: false })}>
+            <img src={getIpfsUrl(post.mediaHash)} alt="Full" />
+          </div>
+        )}
       </div>
     );
   }

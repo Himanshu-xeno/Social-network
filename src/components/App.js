@@ -4,7 +4,8 @@ import './App.css';
 import SocialNetwork from '../abis/SocialNetwork.json';
 import Navbar from './Navbar';
 import Main from './Main';
-import ProfileModal from './ProfileModal';
+import WelcomeScreen from './WelcomeScreen';
+import UserProfile from './UserProfile';
 import { uploadToPinata } from '../pinata';
 import { ToastContainer, toast } from 'react-toastify';
 
@@ -19,11 +20,19 @@ class App extends Component {
       postLikes: {},
       postComments: {},
       profiles: {},
+      userCount: 0,
       loading: true,
       uploading: false,
       uploadStatus: '',
-      showProfileModal: false,
-      username: ''
+      hasProfile: false,
+      username: '',
+      bio: '',
+      avatarHash: '',
+
+      // Navigation
+      currentView: 'feed',
+      viewingProfileAddress: null,
+      viewingProfile: null
     };
   }
 
@@ -40,23 +49,20 @@ class App extends Component {
       try {
         await window.ethereum.request({ method: 'eth_requestAccounts' });
 
-        // Listen for account changes
         window.ethereum.on('accountsChanged', (accounts) => {
-          this.setState({ account: accounts[0] || '' });
+          this.setState({ account: accounts[0] || '', loading: true });
           this.loadBlockchainData();
         });
 
-        // Listen for network changes
         window.ethereum.on('chainChanged', () => {
           window.location.reload();
         });
-
       } catch (error) {
-        console.error('MetaMask connection failed:', error);
-        toast.error('MetaMask connection failed. Please try again.');
+        console.error('MetaMask error:', error);
+        toast.error('Please connect MetaMask to continue.');
       }
     } else {
-      toast.error('Please install MetaMask to use DChain Social!');
+      toast.error('Please install MetaMask browser extension!');
     }
   }
 
@@ -67,7 +73,8 @@ class App extends Component {
 
       const accounts = await web3.eth.getAccounts();
       if (accounts.length === 0) {
-        toast.warn('No accounts found. Please connect MetaMask.');
+        toast.warn('Please connect a MetaMask account.');
+        this.setState({ loading: false });
         return;
       }
 
@@ -83,20 +90,32 @@ class App extends Component {
         );
         this.setState({ socialNetwork });
 
-        await this.loadPosts(socialNetwork, accounts[0]);
-
-        // Load user profile
+        // Check if user has profile
         const profileData = await socialNetwork.methods.getProfile(accounts[0]).call();
-        if (profileData[2]) { // exists
-          this.setState({ username: profileData[0] });
+        const hasProfile = profileData.exists || profileData[6];
+
+        if (hasProfile) {
+          this.setState({
+            hasProfile: true,
+            username: profileData.username || profileData[0],
+            bio: profileData.bio || profileData[1],
+            avatarHash: profileData.avatarHash || profileData[2]
+          });
+        } else {
+          this.setState({ hasProfile: false });
         }
 
+        // Load user count
+        const userCount = await socialNetwork.methods.getUserCount().call();
+        this.setState({ userCount: Number(userCount) });
+
+        await this.loadPosts(socialNetwork, accounts[0]);
       } else {
-        toast.error('Smart contract not found on this network. Please switch to the correct network in MetaMask.');
+        toast.error('Contract not found. Make sure you are on the correct network.');
         this.setState({ loading: false });
       }
     } catch (error) {
-      console.error('Blockchain load failed:', error);
+      console.error('Load failed:', error);
       toast.error('Failed to load blockchain data.');
       this.setState({ loading: false });
     }
@@ -114,30 +133,41 @@ class App extends Component {
 
       for (let i = 1; i <= Number(postCount); i++) {
         const post = await socialNetwork.methods.posts(i).call();
-        posts.push(post);
-        profileAddresses.add(post.author);
+        if (post.exists) {
+          posts.push(post);
+          profileAddresses.add(post.author);
 
-        // Check if current user liked
-        const liked = await socialNetwork.methods.hasLiked(i, currentAccount).call();
-        postLikes[i.toString()] = liked;
+          const liked = await socialNetwork.methods.hasLiked(i, currentAccount).call();
+          postLikes[i.toString()] = liked;
 
-        // Load comments
-        const commentIds = await socialNetwork.methods.getPostComments(i).call();
-        let commentsArr = [];
-        for (let j = 0; j < commentIds.length; j++) {
-          const comment = await socialNetwork.methods.comments(Number(commentIds[j])).call();
-          commentsArr.push(comment);
-          profileAddresses.add(comment.author);
+          const commentIds = await socialNetwork.methods.getPostComments(i).call();
+          let commentsArr = [];
+          for (let j = 0; j < commentIds.length; j++) {
+            const comment = await socialNetwork.methods.comments(Number(commentIds[j])).call();
+            commentsArr.push(comment);
+            profileAddresses.add(comment.author);
+          }
+          postComments[i.toString()] = commentsArr;
         }
-        postComments[i.toString()] = commentsArr;
       }
 
-      // Load profiles
+      // Load all profiles
       let profiles = {};
       for (const addr of profileAddresses) {
-        const profileData = await socialNetwork.methods.getProfile(addr).call();
-        if (profileData[2]) {
-          profiles[addr] = { username: profileData[0], avatarHash: profileData[1] };
+        try {
+          const pData = await socialNetwork.methods.getProfile(addr).call();
+          if (pData.exists || pData[6]) {
+            profiles[addr] = {
+              username: pData.username || pData[0],
+              bio: pData.bio || pData[1],
+              avatarHash: pData.avatarHash || pData[2],
+              postCount: pData.userPostCount || pData[3],
+              totalTipsReceived: pData.totalTipsReceived || pData[4],
+              joinedAt: pData.joinedAt || pData[5]
+            };
+          }
+        } catch (e) {
+          console.warn('Could not load profile for', addr);
         }
       }
 
@@ -148,52 +178,114 @@ class App extends Component {
         profiles,
         loading: false
       });
-
     } catch (error) {
       console.error('Error loading posts:', error);
       this.setState({ loading: false });
     }
   }
 
+  // ======= PROFILE FUNCTIONS =======
+
+  checkUsername = async (username) => {
+    try {
+      const available = await this.state.socialNetwork.methods.isUsernameAvailable(username).call();
+      return available;
+    } catch (error) {
+      console.error('Username check failed:', error);
+      return false;
+    }
+  }
+
+  createProfile = async (username, bio, avatarHash) => {
+    this.setState({ uploading: true, uploadStatus: 'Creating your profile on the blockchain...' });
+
+    try {
+      await this.state.socialNetwork.methods
+        .createProfile(username, bio, avatarHash)
+        .send({ from: this.state.account })
+        .on('transactionHash', () => {
+          this.setState({ uploadStatus: 'Transaction submitted...' });
+        });
+
+      toast.success('🎉 Welcome to DChain Social!');
+      this.setState({
+        uploading: false,
+        uploadStatus: '',
+        hasProfile: true,
+        username,
+        bio,
+        avatarHash
+      });
+
+      await this.loadPosts(this.state.socialNetwork, this.state.account);
+    } catch (error) {
+      console.error('Profile creation failed:', error);
+      toast.error('Profile creation failed. Please try again.');
+      this.setState({ uploading: false, uploadStatus: '' });
+      throw error;
+    }
+  }
+
+  updateProfile = async (username, bio, avatarHash) => {
+    this.setState({ uploading: true, uploadStatus: 'Updating profile...' });
+
+    try {
+      await this.state.socialNetwork.methods
+        .updateProfile(username, bio, avatarHash)
+        .send({ from: this.state.account });
+
+      toast.success('✨ Profile updated!');
+      this.setState({
+        uploading: false,
+        uploadStatus: '',
+        username,
+        bio,
+        avatarHash
+      });
+
+      await this.loadPosts(this.state.socialNetwork, this.state.account);
+    } catch (error) {
+      console.error('Profile update failed:', error);
+      toast.error('Profile update failed.');
+      this.setState({ uploading: false, uploadStatus: '' });
+      throw error;
+    }
+  }
+
+  // ======= POST FUNCTIONS =======
+
   createPost = async (content, mediaFile, mediaType) => {
     let mediaHash = '';
 
     if (mediaFile) {
       this.setState({ uploading: true, uploadStatus: 'Uploading file to IPFS...' });
-
       try {
         mediaHash = await uploadToPinata(mediaFile);
         this.setState({ uploadStatus: 'File uploaded! Confirming transaction...' });
-        toast.success('File uploaded to IPFS successfully!');
+        toast.info('📤 File uploaded to IPFS!');
       } catch (error) {
-        console.error('IPFS upload failed:', error);
-        toast.error('Failed to upload file to IPFS. Please check your Pinata API keys.');
+        toast.error('IPFS upload failed. Check Pinata API keys.');
         this.setState({ uploading: false, uploadStatus: '' });
         throw error;
       }
     }
 
     const finalType = mediaFile ? mediaType : 'text';
-
-    this.setState({ uploading: true, uploadStatus: 'Waiting for transaction confirmation...' });
+    this.setState({ uploading: true, uploadStatus: 'Confirming transaction in MetaMask...' });
 
     try {
       await this.state.socialNetwork.methods
         .createPost(content || '', mediaHash, finalType)
         .send({ from: this.state.account })
         .on('transactionHash', () => {
-          this.setState({ uploadStatus: 'Transaction submitted! Waiting for confirmation...' });
+          this.setState({ uploadStatus: 'Transaction submitted...' });
         });
 
-      toast.success('🎉 Post published on the blockchain!');
+      toast.success('🎉 Post published!');
       this.setState({ uploading: false, uploadStatus: '' });
-
-      // Reload posts
       await this.loadPosts(this.state.socialNetwork, this.state.account);
-
     } catch (error) {
-      console.error('Transaction failed:', error);
-      toast.error('Transaction failed or was rejected.');
+      toast.error('Post creation failed.');
       this.setState({ uploading: false, uploadStatus: '' });
       throw error;
     }
@@ -204,97 +296,96 @@ class App extends Component {
       await this.state.socialNetwork.methods
         .tipPost(id)
         .send({ from: this.state.account, value: tipAmount });
-
-      toast.success('💰 Tip sent successfully!');
+      toast.success('💰 Tip sent!');
       await this.loadPosts(this.state.socialNetwork, this.state.account);
     } catch (error) {
-      console.error('Tip failed:', error);
-      toast.error('Tip transaction failed.');
+      toast.error('Tip failed.');
     }
   }
 
   likePost = async (id) => {
     try {
-      await this.state.socialNetwork.methods
-        .likePost(id)
-        .send({ from: this.state.account });
-
-      toast.success('❤️ Post liked!');
+      await this.state.socialNetwork.methods.likePost(id).send({ from: this.state.account });
+      toast.success('❤️ Liked!');
       await this.loadPosts(this.state.socialNetwork, this.state.account);
     } catch (error) {
-      console.error('Like failed:', error);
-      toast.error('Like transaction failed.');
+      toast.error('Like failed.');
     }
   }
 
   unlikePost = async (id) => {
     try {
-      await this.state.socialNetwork.methods
-        .unlikePost(id)
-        .send({ from: this.state.account });
-
-      toast.info('💔 Post unliked.');
+      await this.state.socialNetwork.methods.unlikePost(id).send({ from: this.state.account });
+      toast.info('💔 Unliked.');
       await this.loadPosts(this.state.socialNetwork, this.state.account);
     } catch (error) {
-      console.error('Unlike failed:', error);
-      toast.error('Unlike transaction failed.');
+      toast.error('Unlike failed.');
     }
   }
 
   addComment = async (postId, content) => {
     try {
-      await this.state.socialNetwork.methods
-        .addComment(postId, content)
-        .send({ from: this.state.account });
-
+      await this.state.socialNetwork.methods.addComment(postId, content).send({ from: this.state.account });
       toast.success('💬 Comment added!');
       await this.loadPosts(this.state.socialNetwork, this.state.account);
     } catch (error) {
-      console.error('Comment failed:', error);
-      toast.error('Comment transaction failed.');
+      toast.error('Comment failed.');
     }
   }
 
-  updateProfile = async (username) => {
+  // ======= NAVIGATION =======
+
+  goToProfile = async (address) => {
     try {
-      await this.state.socialNetwork.methods
-        .updateProfile(username, '')
-        .send({ from: this.state.account });
-
-      toast.success('✨ Profile updated!');
-      this.setState({ username, showProfileModal: false });
-      await this.loadPosts(this.state.socialNetwork, this.state.account);
+      const profileData = await this.state.socialNetwork.methods.getProfile(address).call();
+      if (profileData.exists || profileData[6]) {
+        this.setState({
+          currentView: 'profile',
+          viewingProfileAddress: address,
+          viewingProfile: {
+            username: profileData.username || profileData[0],
+            bio: profileData.bio || profileData[1],
+            avatarHash: profileData.avatarHash || profileData[2],
+            postCount: profileData.userPostCount || profileData[3],
+            totalTipsReceived: profileData.totalTipsReceived || profileData[4],
+            joinedAt: profileData.joinedAt || profileData[5]
+          }
+        });
+      } else {
+        toast.warn('This user has not created a profile yet.');
+      }
     } catch (error) {
-      console.error('Profile update failed:', error);
-      toast.error('Profile update failed.');
+      console.error('Error loading profile:', error);
     }
   }
+
+  goToFeed = () => {
+    this.setState({
+      currentView: 'feed',
+      viewingProfileAddress: null,
+      viewingProfile: null
+    });
+  }
+
+  // ======= RENDER =======
 
   render() {
     const {
       account, posts, loading, uploading, uploadStatus,
-      showProfileModal, username, postLikes, postComments, profiles
+      hasProfile, username, bio, avatarHash,
+      currentView, viewingProfileAddress, viewingProfile,
+      postLikes, postComments, profiles, userCount
     } = this.state;
 
     return (
       <div>
         <ToastContainer
           position="top-right"
-          autoClose={4000}
+          autoClose={3000}
           hideProgressBar={false}
           newestOnTop
           closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
           theme="dark"
-        />
-
-        <Navbar
-          account={account}
-          username={username}
-          onProfileClick={() => this.setState({ showProfileModal: true })}
         />
 
         {/* Upload Overlay */}
@@ -303,40 +394,72 @@ class App extends Component {
             <div className="upload-modal">
               <div className="spinner"></div>
               <p className="upload-status">{uploadStatus}</p>
-              <p className="upload-substatus">Please confirm the transaction in MetaMask</p>
+              <p className="upload-substatus">Please confirm in MetaMask</p>
             </div>
           </div>
         )}
 
-        {/* Profile Modal */}
-        {showProfileModal && (
-          <ProfileModal
-            currentUsername={username}
-            onSave={this.updateProfile}
-            onClose={() => this.setState({ showProfileModal: false })}
-          />
-        )}
-
-        {/* Main Content */}
         {loading ? (
           <div className="loading-container">
             <div className="spinner"></div>
-            <p className="loading-text">Connecting to the blockchain...</p>
-            <p className="loading-subtext">Make sure Ganache is running and MetaMask is connected</p>
+            <p className="loading-text">Connecting to blockchain...</p>
+            <p className="loading-subtext">
+              Make sure Ganache is running and MetaMask is connected
+            </p>
           </div>
-        ) : (
-          <Main
+        ) : !hasProfile ? (
+          /* WELCOME / SIGNUP SCREEN */
+          <WelcomeScreen
             account={account}
-            posts={posts}
-            createPost={this.createPost}
-            tipPost={this.tipPost}
-            likePost={this.likePost}
-            unlikePost={this.unlikePost}
-            addComment={this.addComment}
-            postLikes={postLikes}
-            postComments={postComments}
-            profiles={profiles}
+            checkUsername={this.checkUsername}
+            onCreateProfile={this.createProfile}
           />
+        ) : (
+          /* MAIN APP */
+          <>
+            <Navbar
+              account={account}
+              username={username}
+              avatarHash={avatarHash}
+              onProfileClick={this.goToProfile}
+              onHomeClick={this.goToFeed}
+            />
+
+            {currentView === 'feed' && (
+              <Main
+                account={account}
+                posts={posts}
+                createPost={this.createPost}
+                tipPost={this.tipPost}
+                likePost={this.likePost}
+                unlikePost={this.unlikePost}
+                addComment={this.addComment}
+                postLikes={postLikes}
+                postComments={postComments}
+                profiles={profiles}
+                userCount={userCount}
+                onProfileClick={this.goToProfile}
+              />
+            )}
+
+            {currentView === 'profile' && viewingProfile && (
+              <UserProfile
+                profile={viewingProfile}
+                userAddress={viewingProfileAddress}
+                posts={posts}
+                isOwnProfile={viewingProfileAddress?.toLowerCase() === account?.toLowerCase()}
+                onBack={this.goToFeed}
+                onUpdateProfile={this.updateProfile}
+                tipPost={this.tipPost}
+                likePost={this.likePost}
+                unlikePost={this.unlikePost}
+                addComment={this.addComment}
+                postLikes={postLikes}
+                postComments={postComments}
+                profiles={profiles}
+              />
+            )}
+          </>
         )}
       </div>
     );

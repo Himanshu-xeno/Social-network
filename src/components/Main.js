@@ -1,7 +1,7 @@
 import React, { Component } from 'react';
 import CreatePost from './CreatePost';
 import PostCard from './PostCard';
-import { FaGlobeAmericas, FaImage, FaVideo, FaMusic, FaFileAlt, FaFire } from 'react-icons/fa';
+import { FaGlobeAmericas, FaImage, FaVideo, FaMusic, FaFileAlt, FaFire, FaUsers } from 'react-icons/fa';
 
 class Main extends Component {
   constructor(props) {
@@ -18,7 +18,6 @@ class Main extends Component {
 
     let filtered = [...posts];
 
-    // Filter
     if (filter !== 'all') {
       filtered = filtered.filter(post => {
         const type = post.mediaType || 'text';
@@ -27,7 +26,6 @@ class Main extends Component {
       });
     }
 
-    // Sort
     switch (sortBy) {
       case 'newest':
         filtered.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
@@ -48,15 +46,17 @@ class Main extends Component {
   getTotalTips = () => {
     const { posts } = this.props;
     if (!posts || posts.length === 0) return '0';
-    const total = posts.reduce((sum, post) => {
-      return sum + Number(post.tipAmount || 0);
-    }, 0);
+    const total = posts.reduce((sum, post) => sum + Number(post.tipAmount || 0), 0);
     if (total === 0) return '0';
     return parseFloat(window.web3.utils.fromWei(total.toString(), 'Ether')).toFixed(4);
   }
 
   render() {
-    const { posts, account, createPost, tipPost, likePost, unlikePost, addComment, postLikes, postComments, profiles } = this.props;
+    const {
+      posts, account, createPost, tipPost, likePost, unlikePost,
+      addComment, postLikes, postComments, profiles, userCount,
+      onProfileClick
+    } = this.props;
     const { filter, sortBy } = this.state;
     const filteredPosts = this.getFilteredPosts();
 
@@ -64,11 +64,18 @@ class Main extends Component {
       <div className="main-content">
         <div className="content-container">
 
-          {/* Stats Bar */}
+          {/* Stats */}
           <div className="stats-bar">
             <div className="stat-item">
               <span className="stat-value">{posts.length}</span>
-              <span className="stat-label">Total Posts</span>
+              <span className="stat-label">Posts</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-value">
+                <FaUsers style={{ marginRight: '4px', fontSize: '0.9rem' }} />
+                {userCount || 0}
+              </span>
+              <span className="stat-label">Users</span>
             </div>
             <div className="stat-item">
               <span className="stat-value">{this.getTotalTips()}</span>
@@ -78,20 +85,17 @@ class Main extends Component {
               <span className="stat-value">
                 {posts.reduce((sum, p) => sum + Number(p.likeCount || 0), 0)}
               </span>
-              <span className="stat-label">Total Likes</span>
+              <span className="stat-label">Likes</span>
             </div>
           </div>
 
           {/* Create Post */}
-          <CreatePost
-            account={account}
-            createPost={createPost}
-          />
+          <CreatePost account={account} createPost={createPost} />
 
-          {/* Filter Bar */}
+          {/* Filters */}
           <div className="filter-bar">
             {[
-              { key: 'all', label: 'All Posts', icon: <FaGlobeAmericas /> },
+              { key: 'all', label: 'All', icon: <FaGlobeAmericas /> },
               { key: 'text', label: 'Text', icon: <FaFileAlt /> },
               { key: 'image', label: 'Images', icon: <FaImage /> },
               { key: 'video', label: 'Videos', icon: <FaVideo /> },
@@ -107,28 +111,26 @@ class Main extends Component {
             ))}
           </div>
 
-          {/* Sort Bar */}
+          {/* Sort */}
           <div className="sort-bar">
-            <span className="sort-label">
-              <FaFire style={{ marginRight: '4px' }} /> Sort by:
-            </span>
+            <span className="sort-label"><FaFire /> Sort:</span>
             <select
               className="sort-select"
               value={sortBy}
               onChange={(e) => this.setState({ sortBy: e.target.value })}
             >
-              <option value="newest">🕐 Newest First</option>
+              <option value="newest">🕐 Newest</option>
               <option value="mostTipped">💰 Most Tipped</option>
               <option value="mostLiked">❤️ Most Liked</option>
             </select>
           </div>
 
-          {/* Posts Feed */}
+          {/* Posts */}
           {filteredPosts.length === 0 ? (
             <div className="no-posts">
               <div className="no-posts-icon">📭</div>
               <h3>No posts yet</h3>
-              <p>Be the first to share something with the community!</p>
+              <p>Be the first to share something!</p>
             </div>
           ) : (
             filteredPosts.map((post, index) => (
@@ -142,6 +144,7 @@ class Main extends Component {
                 hasLiked={postLikes[post.id?.toString()] || false}
                 comments={postComments[post.id?.toString()] || []}
                 profiles={profiles}
+                onProfileClick={onProfileClick}
               />
             ))
           )}
