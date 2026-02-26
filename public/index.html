@@ -1,22 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f0f23" />
+    <meta name="theme-color" content="#0a0a1a" />
     <meta
       name="description"
-      content="DChain Social - Decentralized Social Media Platform"
+      content="DChain Social - Decentralized Social Media Platform on Ethereum Blockchain"
     />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <title>DChain Social</title>
+    <title>DChain Social - Decentralized Social Media</title>
+    <script>
+      // Load saved theme before render to prevent flash
+      (function () {
+        var theme = localStorage.getItem("dchain-theme") || "dark";
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
   </head>
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <noscript>You need to enable JavaScript to run DChain Social.</noscript>
     <div id="root"></div>
   </body>
 </html>

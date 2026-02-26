@@ -6,6 +6,7 @@ import Navbar from './Navbar';
 import Main from './Main';
 import WelcomeScreen from './WelcomeScreen';
 import UserProfile from './UserProfile';
+import About from './About';
 import { uploadToPinata } from '../pinata';
 import { ToastContainer, toast } from 'react-toastify';
 
@@ -28,8 +29,6 @@ class App extends Component {
       username: '',
       bio: '',
       avatarHash: '',
-
-      // Navigation
       currentView: 'feed',
       viewingProfileAddress: null,
       viewingProfile: null
@@ -45,52 +44,42 @@ class App extends Component {
     if (window.ethereum) {
       const web3 = new Web3(window.ethereum);
       window.web3 = web3;
-
       try {
         await window.ethereum.request({ method: 'eth_requestAccounts' });
-
         window.ethereum.on('accountsChanged', (accounts) => {
-          this.setState({ account: accounts[0] || '', loading: true });
+          this.setState({ account: accounts[0] || '', loading: true, currentView: 'feed' });
           this.loadBlockchainData();
         });
-
-        window.ethereum.on('chainChanged', () => {
-          window.location.reload();
-        });
+        window.ethereum.on('chainChanged', () => window.location.reload());
       } catch (error) {
-        console.error('MetaMask error:', error);
         toast.error('Please connect MetaMask to continue.');
       }
     } else {
       toast.error('Please install MetaMask browser extension!');
+      this.setState({ loading: false });
     }
   }
 
   async loadBlockchainData() {
     try {
       const web3 = window.web3;
-      if (!web3) return;
+      if (!web3) { this.setState({ loading: false }); return; }
 
       const accounts = await web3.eth.getAccounts();
       if (accounts.length === 0) {
-        toast.warn('Please connect a MetaMask account.');
+        toast.warn('No accounts found. Connect MetaMask.');
         this.setState({ loading: false });
         return;
       }
 
       this.setState({ account: accounts[0] });
-
       const networkId = await web3.eth.net.getId();
       const networkData = SocialNetwork.networks[networkId];
 
       if (networkData) {
-        const socialNetwork = new web3.eth.Contract(
-          SocialNetwork.abi,
-          networkData.address
-        );
+        const socialNetwork = new web3.eth.Contract(SocialNetwork.abi, networkData.address);
         this.setState({ socialNetwork });
 
-        // Check if user has profile
         const profileData = await socialNetwork.methods.getProfile(accounts[0]).call();
         const hasProfile = profileData.exists || profileData[6];
 
@@ -102,16 +91,15 @@ class App extends Component {
             avatarHash: profileData.avatarHash || profileData[2]
           });
         } else {
-          this.setState({ hasProfile: false });
+          this.setState({ hasProfile: false, loading: false });
+          return;
         }
 
-        // Load user count
         const userCount = await socialNetwork.methods.getUserCount().call();
         this.setState({ userCount: Number(userCount) });
-
         await this.loadPosts(socialNetwork, accounts[0]);
       } else {
-        toast.error('Contract not found. Make sure you are on the correct network.');
+        toast.error('Smart contract not found. Check your network in MetaMask.');
         this.setState({ loading: false });
       }
     } catch (error) {
@@ -126,9 +114,7 @@ class App extends Component {
       const postCount = await socialNetwork.methods.postCount().call();
       this.setState({ postCount: Number(postCount) });
 
-      let posts = [];
-      let postLikes = {};
-      let postComments = {};
+      let posts = [], postLikes = {}, postComments = {};
       let profileAddresses = new Set();
 
       for (let i = 1; i <= Number(postCount); i++) {
@@ -136,7 +122,6 @@ class App extends Component {
         if (post.exists) {
           posts.push(post);
           profileAddresses.add(post.author);
-
           const liked = await socialNetwork.methods.hasLiked(i, currentAccount).call();
           postLikes[i.toString()] = liked;
 
@@ -151,7 +136,6 @@ class App extends Component {
         }
       }
 
-      // Load all profiles
       let profiles = {};
       for (const addr of profileAddresses) {
         try {
@@ -166,61 +150,36 @@ class App extends Component {
               joinedAt: pData.joinedAt || pData[5]
             };
           }
-        } catch (e) {
-          console.warn('Could not load profile for', addr);
-        }
+        } catch (e) { /* skip */ }
       }
 
-      this.setState({
-        posts,
-        postLikes,
-        postComments,
-        profiles,
-        loading: false
-      });
+      const userCount = await socialNetwork.methods.getUserCount().call();
+
+      this.setState({ posts, postLikes, postComments, profiles, userCount: Number(userCount), loading: false });
     } catch (error) {
       console.error('Error loading posts:', error);
       this.setState({ loading: false });
     }
   }
 
-  // ======= PROFILE FUNCTIONS =======
-
   checkUsername = async (username) => {
     try {
-      const available = await this.state.socialNetwork.methods.isUsernameAvailable(username).call();
-      return available;
-    } catch (error) {
-      console.error('Username check failed:', error);
-      return false;
-    }
+      return await this.state.socialNetwork.methods.isUsernameAvailable(username).call();
+    } catch (error) { return false; }
   }
 
   createProfile = async (username, bio, avatarHash) => {
-    this.setState({ uploading: true, uploadStatus: 'Creating your profile on the blockchain...' });
-
+    this.setState({ uploading: true, uploadStatus: 'Creating profile on blockchain...' });
     try {
-      await this.state.socialNetwork.methods
-        .createProfile(username, bio, avatarHash)
+      await this.state.socialNetwork.methods.createProfile(username, bio, avatarHash)
         .send({ from: this.state.account })
-        .on('transactionHash', () => {
-          this.setState({ uploadStatus: 'Transaction submitted...' });
-        });
+        .on('transactionHash', () => this.setState({ uploadStatus: 'Transaction submitted...' }));
 
       toast.success('🎉 Welcome to DChain Social!');
-      this.setState({
-        uploading: false,
-        uploadStatus: '',
-        hasProfile: true,
-        username,
-        bio,
-        avatarHash
-      });
-
+      this.setState({ uploading: false, uploadStatus: '', hasProfile: true, username, bio, avatarHash });
       await this.loadPosts(this.state.socialNetwork, this.state.account);
     } catch (error) {
-      console.error('Profile creation failed:', error);
-      toast.error('Profile creation failed. Please try again.');
+      toast.error('Profile creation failed.');
       this.setState({ uploading: false, uploadStatus: '' });
       throw error;
     }
@@ -228,59 +187,41 @@ class App extends Component {
 
   updateProfile = async (username, bio, avatarHash) => {
     this.setState({ uploading: true, uploadStatus: 'Updating profile...' });
-
     try {
-      await this.state.socialNetwork.methods
-        .updateProfile(username, bio, avatarHash)
+      await this.state.socialNetwork.methods.updateProfile(username, bio, avatarHash)
         .send({ from: this.state.account });
-
       toast.success('✨ Profile updated!');
-      this.setState({
-        uploading: false,
-        uploadStatus: '',
-        username,
-        bio,
-        avatarHash
-      });
-
+      this.setState({ uploading: false, uploadStatus: '', username, bio, avatarHash });
       await this.loadPosts(this.state.socialNetwork, this.state.account);
     } catch (error) {
-      console.error('Profile update failed:', error);
       toast.error('Profile update failed.');
       this.setState({ uploading: false, uploadStatus: '' });
       throw error;
     }
   }
 
-  // ======= POST FUNCTIONS =======
-
   createPost = async (content, mediaFile, mediaType) => {
     let mediaHash = '';
-
     if (mediaFile) {
-      this.setState({ uploading: true, uploadStatus: 'Uploading file to IPFS...' });
+      this.setState({ uploading: true, uploadStatus: 'Uploading to IPFS...' });
       try {
         mediaHash = await uploadToPinata(mediaFile);
-        this.setState({ uploadStatus: 'File uploaded! Confirming transaction...' });
+        this.setState({ uploadStatus: 'File uploaded! Confirming...' });
         toast.info('📤 File uploaded to IPFS!');
       } catch (error) {
-        toast.error('IPFS upload failed. Check Pinata API keys.');
+        toast.error('IPFS upload failed. Check Pinata keys.');
         this.setState({ uploading: false, uploadStatus: '' });
         throw error;
       }
     }
 
     const finalType = mediaFile ? mediaType : 'text';
-    this.setState({ uploading: true, uploadStatus: 'Confirming transaction in MetaMask...' });
+    this.setState({ uploading: true, uploadStatus: 'Confirm in MetaMask...' });
 
     try {
-      await this.state.socialNetwork.methods
-        .createPost(content || '', mediaHash, finalType)
+      await this.state.socialNetwork.methods.createPost(content || '', mediaHash, finalType)
         .send({ from: this.state.account })
-        .on('transactionHash', () => {
-          this.setState({ uploadStatus: 'Transaction submitted...' });
-        });
-
+        .on('transactionHash', () => this.setState({ uploadStatus: 'Transaction submitted...' }));
       toast.success('🎉 Post published!');
       this.setState({ uploading: false, uploadStatus: '' });
       await this.loadPosts(this.state.socialNetwork, this.state.account);
@@ -293,14 +234,10 @@ class App extends Component {
 
   tipPost = async (id, tipAmount) => {
     try {
-      await this.state.socialNetwork.methods
-        .tipPost(id)
-        .send({ from: this.state.account, value: tipAmount });
+      await this.state.socialNetwork.methods.tipPost(id).send({ from: this.state.account, value: tipAmount });
       toast.success('💰 Tip sent!');
       await this.loadPosts(this.state.socialNetwork, this.state.account);
-    } catch (error) {
-      toast.error('Tip failed.');
-    }
+    } catch (error) { toast.error('Tip failed.'); }
   }
 
   likePost = async (id) => {
@@ -308,9 +245,7 @@ class App extends Component {
       await this.state.socialNetwork.methods.likePost(id).send({ from: this.state.account });
       toast.success('❤️ Liked!');
       await this.loadPosts(this.state.socialNetwork, this.state.account);
-    } catch (error) {
-      toast.error('Like failed.');
-    }
+    } catch (error) { toast.error('Like failed.'); }
   }
 
   unlikePost = async (id) => {
@@ -318,9 +253,7 @@ class App extends Component {
       await this.state.socialNetwork.methods.unlikePost(id).send({ from: this.state.account });
       toast.info('💔 Unliked.');
       await this.loadPosts(this.state.socialNetwork, this.state.account);
-    } catch (error) {
-      toast.error('Unlike failed.');
-    }
+    } catch (error) { toast.error('Unlike failed.'); }
   }
 
   addComment = async (postId, content) => {
@@ -328,12 +261,8 @@ class App extends Component {
       await this.state.socialNetwork.methods.addComment(postId, content).send({ from: this.state.account });
       toast.success('💬 Comment added!');
       await this.loadPosts(this.state.socialNetwork, this.state.account);
-    } catch (error) {
-      toast.error('Comment failed.');
-    }
+    } catch (error) { toast.error('Comment failed.'); }
   }
-
-  // ======= NAVIGATION =======
 
   goToProfile = async (address) => {
     try {
@@ -351,23 +280,22 @@ class App extends Component {
             joinedAt: profileData.joinedAt || profileData[5]
           }
         });
+        window.scrollTo(0, 0);
       } else {
-        toast.warn('This user has not created a profile yet.');
+        toast.warn('This user has no profile yet.');
       }
-    } catch (error) {
-      console.error('Error loading profile:', error);
-    }
+    } catch (error) { console.error('Profile load error:', error); }
   }
 
   goToFeed = () => {
-    this.setState({
-      currentView: 'feed',
-      viewingProfileAddress: null,
-      viewingProfile: null
-    });
+    this.setState({ currentView: 'feed', viewingProfileAddress: null, viewingProfile: null });
+    window.scrollTo(0, 0);
   }
 
-  // ======= RENDER =======
+  goToAbout = () => {
+    this.setState({ currentView: 'about' });
+    window.scrollTo(0, 0);
+  }
 
   render() {
     const {
@@ -379,16 +307,9 @@ class App extends Component {
 
     return (
       <div>
-        <ToastContainer
-          position="top-right"
-          autoClose={3000}
-          hideProgressBar={false}
-          newestOnTop
-          closeOnClick
-          theme="dark"
-        />
+        <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false}
+          newestOnTop closeOnClick theme="colored" />
 
-        {/* Upload Overlay */}
         {uploading && (
           <div className="upload-overlay">
             <div className="upload-modal">
@@ -403,62 +324,52 @@ class App extends Component {
           <div className="loading-container">
             <div className="spinner"></div>
             <p className="loading-text">Connecting to blockchain...</p>
-            <p className="loading-subtext">
-              Make sure Ganache is running and MetaMask is connected
-            </p>
+            <p className="loading-subtext">Make sure Ganache is running & MetaMask is connected</p>
           </div>
         ) : !hasProfile ? (
-          /* WELCOME / SIGNUP SCREEN */
           <WelcomeScreen
             account={account}
             checkUsername={this.checkUsername}
             onCreateProfile={this.createProfile}
           />
         ) : (
-          /* MAIN APP */
           <>
             <Navbar
               account={account}
               username={username}
               avatarHash={avatarHash}
+              currentView={currentView}
               onProfileClick={this.goToProfile}
               onHomeClick={this.goToFeed}
+              onAboutClick={this.goToAbout}
             />
 
             {currentView === 'feed' && (
               <Main
-                account={account}
-                posts={posts}
-                createPost={this.createPost}
-                tipPost={this.tipPost}
-                likePost={this.likePost}
-                unlikePost={this.unlikePost}
+                account={account} posts={posts}
+                createPost={this.createPost} tipPost={this.tipPost}
+                likePost={this.likePost} unlikePost={this.unlikePost}
                 addComment={this.addComment}
-                postLikes={postLikes}
-                postComments={postComments}
-                profiles={profiles}
-                userCount={userCount}
+                postLikes={postLikes} postComments={postComments}
+                profiles={profiles} userCount={userCount}
                 onProfileClick={this.goToProfile}
               />
             )}
 
             {currentView === 'profile' && viewingProfile && (
               <UserProfile
-                profile={viewingProfile}
-                userAddress={viewingProfileAddress}
+                profile={viewingProfile} userAddress={viewingProfileAddress}
                 posts={posts}
                 isOwnProfile={viewingProfileAddress?.toLowerCase() === account?.toLowerCase()}
-                onBack={this.goToFeed}
-                onUpdateProfile={this.updateProfile}
-                tipPost={this.tipPost}
-                likePost={this.likePost}
-                unlikePost={this.unlikePost}
-                addComment={this.addComment}
-                postLikes={postLikes}
-                postComments={postComments}
-                profiles={profiles}
+                onBack={this.goToFeed} onUpdateProfile={this.updateProfile}
+                tipPost={this.tipPost} likePost={this.likePost}
+                unlikePost={this.unlikePost} addComment={this.addComment}
+                postLikes={postLikes} postComments={postComments}
+                profiles={profiles} onProfileClick={this.goToProfile}
               />
             )}
+
+            {currentView === 'about' && <About />}
           </>
         )}
       </div>
