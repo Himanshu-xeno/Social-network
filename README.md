@@ -316,29 +316,35 @@ dchain-social/
 │   ├── abis/                    # Compiled contract JSON (auto-generated)
 │   ├── components/
 │   │   ├── About.js             # About page
-│   │   ├── App.css              # Complete stylesheet (dark + light)
-│   │   ├── App.js               # Main application controller
-│   │   ├── CreatePost.js        # Post creation component
-│   │   ├── Main.js              # Feed view with filters
-│   │   ├── Navbar.js            # Navigation with theme toggle
-│   │   ├── PostCard.js          # Individual post display
-│   │   ├── UserProfile.js       # User profile page
-│   │   └── WelcomeScreen.js     # Signup/onboarding
+│   │   ├── App.css              # Global stylesheet (dark/light theme + layout)
+│   │   ├── App.js               # Main application controller (Web3 + state)
+│   │   ├── AuthScreen.js        # Login/Register screen (wallet-based auth)
+│   │   ├── ConnectWallet.js     # MetaMask connection logic
+│   │   ├── ConnectWallet.css    # Wallet connection styles
+│   │   ├── CreatePost.js        # Post creation (text + media + IPFS)
+│   │   ├── CreateProfile.js     # User profile creation
+│   │   ├── CreateProfile.css    # Profile creation styling
+│   │   ├── Main.js              # Feed/dashboard (filters, sorting, posts)
+│   │   ├── Navbar.js            # Navigation bar (profile, logout, theme)
+│   │   ├── PostCard.js          # Individual post display (like, tip, comment)
+│   │   ├── ProfileModal.js      # Profile popup/modal view
+│   │   ├── UserProfile.js       # User profile page (posts, stats, details)
+│   │   └── WelcomeScreen.js     # Onboarding / intro screen
 │   ├── contracts/
 │   │   ├── Migrations.sol
-│   │   └── SocialNetwork.sol    # Main smart contract
+│   │   └── SocialNetwork.sol    # Core smart contract (profiles, posts, tips)
 │   ├── index.js                 # React entry point
-│   ├── pinata.js                # IPFS upload module
-│   ├── ThemeContext.js           # Dark/Light mode context
-│   └── serviceWorker.js
+│   ├── pinata.js                # IPFS upload module (Pinata integration)
+│   ├── ThemeContext.js          # Dark/Light mode context provider
+│   └── serviceWorker.js         # Service worker (PWA support)
 ├── test/
 │   └── SocialNetwork.test.js    # Smart contract tests
-├── .env                         # Environment variables (not in git)
+├── .env                         # Environment variables (API keys, etc.)
 ├── .gitignore
-├── package.json
-├── truffle-config.js
+├── package.json                 # Project dependencies & scripts
+├── truffle-config.js            # Truffle configuration (networks, compiler)
 ├── vercel.json                  # Vercel deployment config
-└── README.md
+└── README.md                    # Project documentation
 ```
 
 ---
